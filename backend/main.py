@@ -1,6 +1,7 @@
 import os
 import asyncio
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 from minio import Minio
@@ -8,6 +9,7 @@ from dotenv import load_dotenv
 
 # Import the router instance from your new file!
 from routers.files import router as files_router
+from routers.auth import router as auth_router 
 
 load_dotenv()
 
@@ -50,8 +52,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# --- ENABLE CORS MIDDLEWARE INTERCEPTORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Permit your local React development port
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow GET, POST, DELETE, etc.
+    allow_headers=["*"],  # Allow Authorization and Content-Type headers
+)
+
 # --- MOUNT THE ROUTER ---
 # This links all endpoints inside routers/files.py straight to our app!
+app.include_router(auth_router)
 app.include_router(files_router)
 
 

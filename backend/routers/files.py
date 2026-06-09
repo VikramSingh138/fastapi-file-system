@@ -1,11 +1,17 @@
 import io
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from routers.worker import process_file_pipeline
+from dependencies.auth_guard import RoleChecker, get_current_user_metadata
+
 
 router = APIRouter()
+
+# ROLE SPECIFIC GUARD
+admin_only_guard = RoleChecker(["admin"])
+any_authenticated_user_guard = get_current_user_metadata
 
 class FileMetadata(BaseModel):
     id : str = Field(alias = "_id")
@@ -16,7 +22,7 @@ class FileMetadata(BaseModel):
     class Config:
         populate_by_name = True
 
-@router.post("/upload")
+@router.post("/upload", dependencies=[Depends(admin_only_guard)])
 async def upload_files(request: Request, file : UploadFile = File(...)):
     file_contents = await file.read()
     file_size = len(file_contents)
@@ -46,7 +52,7 @@ async def upload_files(request: Request, file : UploadFile = File(...)):
     return {"message": f"Succesfully uploaded {file.filename} ector embedding ingestion started in the background.", "size_bytes":file_size}
 
 
-@router.get("/files", response_model=list[FileMetadata])
+@router.get("/files", response_model=list[FileMetadata], dependencies=[Depends(any_authenticated_user_guard)])
 async def list_files(request: Request, content_type: str | None = None):
     database = request.app.state.database
     query = {}
@@ -61,7 +67,7 @@ async def list_files(request: Request, content_type: str | None = None):
         file_list.append(document)
     return file_list
 
-@router.get("/file/{filename}/download")
+@router.get("/file/{filename}/download", dependencies=[Depends(any_authenticated_user_guard)])
 async def download_file(request: Request, filename: str):
     minio_client = request.app.state.minio_client
     try:
@@ -75,7 +81,7 @@ async def download_file(request: Request, filename: str):
         raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
 
 # 6. Move the Delete Route here
-@router.delete("/files/{filename}")
+@router.delete("/files/{filename}", dependencies=[Depends(admin_only_guard)])
 async def delete_file(request: Request, filename: str):
     minio_client = request.app.state.minio_client
     database = request.app.state.database
