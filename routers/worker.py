@@ -35,7 +35,8 @@ def process_file_pipeline(filename:str) :
     print(f"📦 Celery Worker claims task: Processing embeddings for '{filename}'")
     
     try:
-
+        
+        # the model is also loaded inside the thread only not globally 
         print("Loading local embed model inside Celery process...")
         embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
         
