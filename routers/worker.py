@@ -1,117 +1,102 @@
 import os
-import asyncio
 import io
-from fastapi import FastAPI
+from celery import Celery
+from minio import Minio
+from pinecone import Pinecone
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from pinecone import Pinecone
-from dotenv import load_dotenv
 from pypdf import PdfReader
+from dotenv import load_dotenv
 
 load_dotenv()
 
-#1) download a local lightweight embeddings model 
-
-print("Loading local embed model .....")
-embedding_model = HuggingFaceEmbeddings(model_name = "all-MiniLM-L6-v2")
-
-# 2) connect to pinecone using hidden env keys
+MINIO_URL = os.getenv("MINIO_URL")
+MINIO_USER = os.getenv("MINIO_USER")
+MINIO_PASS = os.getenv("MINIO_PASSWORD")
 PINECONE_KEY = os.getenv("PINECONE_API_KEY")
-INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 
-print("Loading local embed model .....")
-embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# INITIALIZE CELERY INSTANCE
+celery_app = Celery(
+    "vector_worker",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/0"
+)
 
-print("Connecting to Pinecone DB...")
-if not PINECONE_KEY or not INDEX_NAME:
-    print("⚠️ WARNING: Pinecone credentials missing from .env file!")
-    pinecone_index = None
-else:
-    pc = Pinecone(api_key=PINECONE_KEY)
-    pinecone_index = pc.Index(INDEX_NAME)
+# DEFINE INGESTION TASK USING CELERY APP
 
-# 3. Create a global async queue
+@celery_app.task(name = "worker.process_file_pipeline")
+def process_file_pipeline(filename:str) :
+    """
+    This is a standard synchronous function now! Celery workers run 
+    beautifully in a traditional sequential manner.
+    """
 
-task_queue = asyncio.Queue()
+    print(f"📦 Celery Worker claims task: Processing embeddings for '{filename}'")
+    
+    try:
 
-async def process_file_worker():
+        print("Loading local embed model inside Celery process...")
+        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        
+        # create standalone minio client inside worker thread
+        minio_client = Minio(
+            MINIO_URL,
+            access_key = MINIO_USER,
+            secret_key=MINIO_PASS,
+            secure=False
+        )
 
-    if pinecone_index is None:
-        print("❌ Background Worker aborted: Pinecone index not initialized.")
-        return
+        # connect to Pinecone index
 
-    print("Background Ingestion Worker Started successfully! Watching for tasks...")
+        pc = Pinecone(api_key = PINECONE_KEY)
+        pinecone_index = pc.Index(PINECONE_INDEX_NAME)
 
-    while True:
+        # PUll binary assest from MINIO storage
 
-        app_state, filename = await task_queue.get()
-        print(f"📦 Worker picked up task: Processing embeddings for '{filename}'")
+        response = minio_client.get_object(bucket_name="my-files", object_name=filename)
+        raw_data = response.read()
 
-        try :
+        text_content = ""
 
-            # fetch files outta minio
+        # D. Parse layout formats based on file extension
+        if filename.lower().endswith(".pdf"):
+            print(f"📄 PDF layout detected. Initializing binary page extraction stream...")
+            pdf_stream = io.BytesIO(raw_data)
+            reader = PdfReader(pdf_stream)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_content += page_text + "\n"
+        else:
+            print(f"📝 Plain text detected. Decoding string characters...")
+            text_content = raw_data.decode("utf-8", errors="ignore")
 
-            minio_client = app_state.minio_client
-            response = minio_client.get_object(bucket_name="my-files", object_name=filename)
-            raw_data = response.read()
+        if not text_content.strip():
+            print(f"⚠️ Task aborted: '{filename}' has no extractable text content.")
+            return f"Skipped {filename} - No text."
 
-            text_content = ""
+        # E. Fragment text layout into small overlapping semantic chunks
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        chunks = text_splitter.split_text(text_content)
+        print(f" -> Generated {len(chunks)} structural chunks for '{filename}'.")
 
-            if filename.lower().endswith(".pdf"):
-                print(f"Detected pdf file, extracting raw binary stream")
+        # F. Generate vector embeddings arrays and construct strict tuples
+        vectors_to_upsert = []
+        for i, chunk in enumerate(chunks):
+            vector = embedding_model.embed_query(chunk)
+            vector_tuple = (
+                f"{filename}_chunk_{i}",
+                vector,
+                {"filename": filename, "text": chunk}
+            )
+            vectors_to_upsert.append(vector_tuple)
 
-                pdf_stream = io.BytesIO(raw_data)
-                reader = PdfReader(pdf_stream)
+        # G. Sync directly to Pinecone Vector Space cloud engine
+        pinecone_index.upsert(vectors=vectors_to_upsert)
+        print(f"🚀 Celery Task Complete! Uploaded {len(vectors_to_upsert)} vectors to Pinecone for '{filename}'!")
+        return f"Successfully ingested {filename}"
 
-                for page_num , page in enumerate(reader.pages):
-                    page_text = page.extract_text()
-                    if page_text : 
-                        text_content += page_text + "\n"
-
-            else :
-                # fallback to default plain txt route 
-
-                print(f"Detected standard text format")
-                text_content = raw_data.decode("utf-8", errors="ignore")
-
-
-            if not text_content.strip():
-                print(f"⚠️ Worker Warning: '{filename}' contains no readable text. Skipping.")
-                task_queue.task_done()
-                continue
-
-            # chunking the text
-
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-            chunks = text_splitter.split_text(text_content)
-            print(f" -> Split '{filename}' into {len(chunks)} text chunks.")
-
-
-            # generate embeddings and upset to pinecone 
-
-            vectors_to_upsert = []
-
-            for i , chunk in enumerate(chunks):
-                
-                # geneate embedddings
-                vector = embedding_model.embed_query(chunk)
-
-                # create metadata fo this to retrive text
-                vectors_to_upsert.append({
-                    "id": f"{filename}_chunk_{i}", # Unique vector ID
-                    "values": vector,               # The mathematical array list
-                    "metadata": {
-                        "filename": filename,
-                        "text": chunk                # Storing the actual text inside the vector object
-                    }
-                })
-
-            # Batch push to pinecone 
-
-            pinecone_index.upsert(vectors = vectors_to_upsert)
-            print(f"🚀 Successfully uploaded {len(vectors_to_upsert)} vectors to Pinecone for '{filename}'!")
-
-        except Exception as e:
-            print(f"❌ Worker Error processing '{filename}': {e}")
-
-        task_queue.task_done()
+    except Exception as e:
+        print(f"❌ Critical Failure inside Celery processing thread for '{filename}': {e}")
+        raise e

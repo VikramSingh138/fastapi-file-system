@@ -3,7 +3,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from routers.worker import task_queue
+from routers.worker import process_file_pipeline
 
 router = APIRouter()
 
@@ -40,9 +40,8 @@ async def upload_files(request: Request, file : UploadFile = File(...)):
 
     await database["files"].insert_one(metadata)
     
-    await task_queue.put((request.app.state, file.filename))
-    print(f"📌 Added task to queue: '{file.filename}' queued for vector embedding ingestion.")
-
+    process_file_pipeline.delay(file.filename)
+    print(f"📌 Dispatched task to Redis broker: Ingestion message sent for '{file.filename}'.")
 
     return {"message": f"Succesfully uploaded {file.filename} ector embedding ingestion started in the background.", "size_bytes":file_size}
 
