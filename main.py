@@ -1,4 +1,5 @@
 import os
+import asyncio
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -7,6 +8,8 @@ from dotenv import load_dotenv
 
 # Import the router instance from your new file!
 from routers.files import router as files_router
+from routers.worker import task_queue, process_file_worker
+
 
 load_dotenv()
 
@@ -39,8 +42,16 @@ async def lifespan(app: FastAPI):
     else:
         print(f"Bucket '{bucket_name}' already exists")
 
-    yield  # The app runs while paused here
+    # Background worker loop on boot 
+    # continously runs in bg
 
+    worker_task = asyncio.create_task(process_file_worker())
+
+    yield  # The app runs while paused here
+    
+    # closing the app , shutdown
+    print("Canceling background worker task...")
+    worker_task.cancel()
     print("Closing MongoDB connection...")
     app.mongodb_client.close()
 

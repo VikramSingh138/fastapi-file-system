@@ -3,6 +3,8 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from routers.worker import task_queue
+
 router = APIRouter()
 
 class FileMetadata(BaseModel):
@@ -37,7 +39,12 @@ async def upload_files(request: Request, file : UploadFile = File(...)):
     }
 
     await database["files"].insert_one(metadata)
-    return {"message": f"Succesfully uploaded {file.filename}", "size_bytes":file_size}
+    
+    await task_queue.put((request.app.state, file.filename))
+    print(f"📌 Added task to queue: '{file.filename}' queued for vector embedding ingestion.")
+
+
+    return {"message": f"Succesfully uploaded {file.filename} ector embedding ingestion started in the background.", "size_bytes":file_size}
 
 
 @router.get("/files", response_model=list[FileMetadata])
