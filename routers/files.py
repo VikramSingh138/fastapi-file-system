@@ -1,0 +1,81 @@
+import io
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+router = APIRouter()
+
+class FileMetadata(BaseModel):
+    id : str = Field(alias = "_id")
+    filename : str
+    size_bytes : int
+    content_type : str
+
+    class Config:
+        populate_by_name = True
+
+@router.post("/upload")
+async def upload_files(request: Request, file : UploadFile = File(...)):
+    file_contents = await file.read()
+    file_size = len(file_contents)
+
+    minio_client = request.app.state.minio_client
+    database = request.app.state.database
+
+    minio_client.put_object(
+        bucket_name = "my-files",
+        object_name = file.filename,
+        data = io.BytesIO(file_contents),
+        length = file_size,
+        content_type = file.content_type
+    )
+
+    metadata = {
+        "filename":file.filename,
+        "size_bytes": file_size,
+        "content_type": file.content_type
+    }
+
+    await database["files"].insert_one(metadata)
+    return {"message": f"Succesfully uploaded {file.filename}", "size_bytes":file_size}
+
+
+@router.get("/files", response_model=list[FileMetadata])
+async def list_files(request: Request, content_type: str | None = None):
+    database = request.app.state.database
+    query = {}
+    if content_type:
+        query = {"content_type": content_type}
+
+    file_list = []
+    cursor = database["files"].find(query)
+    async for document in cursor:
+        if "_id" in document:
+            document["_id"] = str(document["_id"])
+        file_list.append(document)
+    return file_list
+
+@router.get("/file/{filename}/download")
+async def download_file(request: Request, filename: str):
+    minio_client = request.app.state.minio_client
+    try:
+        response = minio_client.get_object(bucket_name="my-files", object_name=filename)
+        return StreamingResponse(
+            io.BytesIO(response.read()), 
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+
+# 6. Move the Delete Route here
+@router.delete("/files/{filename}")
+async def delete_file(request: Request, filename: str):
+    minio_client = request.app.state.minio_client
+    database = request.app.state.database
+
+    minio_client.remove_object(bucket_name="my-files", object_name=filename)
+    delete_result = await database["files"].delete_one({"filename": filename})
+    if delete_result.deleted_count == 0:
+        return {"message": f"Metadata wasn't found for '{filename}', but cleared any matching storage files."}
+    return {"message": f"Successfully deleted '{filename}' from storage and records."}
