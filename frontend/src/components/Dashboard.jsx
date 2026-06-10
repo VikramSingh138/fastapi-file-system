@@ -36,21 +36,46 @@ function Dashboard({ token, role, onLogout }) {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
     try {
-      await axios.post('http://localhost:8000/upload', formData, {
+      // Phase 1: Request pre-signed URL from FastAPI backend
+      const preSignResponse = await axios.post(
+        'http://localhost:8000/files/generate-upload-url',
+        {
+          filename: selectedFile.name,
+          content_type: selectedFile.type || 'application/octet-stream'
+        },
+        apiConfig
+      );
+
+      const { upload_url, file_id } = preSignResponse.data;
+
+      // Phase 2: Upload raw file binary directly to MinIO using the pre-signed URL
+      // We omit our apiConfig headers here because MinIO uses its own URL query authentication signatures
+      await axios.put(upload_url, selectedFile, {
         headers: {
-          ...apiConfig.headers,
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': selectedFile.type || 'application/octet-stream'
         }
       });
-      setSuccessMessage(`Successfully uploaded "${selectedFile.name}" into storage loop.`);
-      if (fileInputRef.current) fileInputRef.current.value = ''; // Flush input stream cache
-      fetchFiles();
+
+      // Phase 3: Notify FastAPI backend that the direct stream is complete
+      await axios.post(
+        'http://localhost:8000/files/upload-complete',
+        {
+          file_id: file_id,
+          filename: selectedFile.name,
+          content_type: selectedFile.type || 'application/octet-stream',
+          size_bytes: selectedFile.size
+        },
+        apiConfig
+      );
+
+      setSuccessMessage(`Successfully uploaded "${selectedFile.name}" directly to storage via pre-signed path.`);
+      if (fileInputRef.current) fileInputRef.current.value = ''; // Flush input channel cache
+      fetchFiles(); // Reload the document tracking grid list
+      
     } catch (error) {
-      setErrorMessage(error.response?.data?.detail || 'Upload structural interception occurred.');
+      console.error(error);
+      setErrorMessage(error.response?.data?.detail || 'Direct-to-storage ingestion pipeline aborted.');
     }
   };
 
