@@ -2,67 +2,130 @@
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  color: #213547;
+  background-color: #f8fafc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
   min-height: 100vh;
+  width: 100%;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+#root {
+  min-height: 100vh;
+  width: 100%;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+/* ── Login responsive ─────────────────────────── */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 16px;
+  background-color: #eef2f5;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 40px 36px;
+  border-radius: 14px;
+  background-color: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 28px 20px;
   }
-  a:hover {
-    color: #747bff;
+}
+
+/* ── Dashboard responsive ─────────────────────── */
+.dashboard-container {
+  padding: 28px 32px;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 16px;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Chatbot responsive ───────────────────────── */
+.chat-root {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 160px);
+  min-height: 500px;
+}
+
+.chat-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+}
+
+.chat-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .chat-root {
+    flex-direction: column;
+    height: auto;
   }
+
+  .chat-sidebar {
+    width: 100%;
+    max-height: 220px;
+  }
+
+  .chat-panel {
+    height: 520px;
+  }
+}
+
+/* ── Typing dots animation ────────────────────── */
+@keyframes chatDotBounce {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-6px); }
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #94a3b8;
+  display: inline-block;
+  animation: chatDotBounce 0.55s infinite alternate;
 }
