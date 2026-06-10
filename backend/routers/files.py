@@ -114,18 +114,18 @@ async def list_files(request: Request, content_type: str | None = None):
         file_list.append(document)
     return file_list
 
-@router.get("/{filename}/download", dependencies=[Depends(any_authenticated_user_guard)])
-async def download_file(request: Request, filename: str):
+@router.get("/{file_id}/download", dependencies=[Depends(any_authenticated_user_guard)])
+async def download_file(request: Request, file_id: str):
     minio_client = request.app.state.minio_client
     try:
-        response = minio_client.get_object(bucket_name="my-files", object_name=filename)
+        response = minio_client.get_object(bucket_name="my-files", object_name=file_id)
         return StreamingResponse(
             io.BytesIO(response.read()), 
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": f"attachment; filename={file_id}"}
         )
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+        raise HTTPException(status_code=404, detail=f"File '{file_id}' not found.")
 
 # 6. Move the Delete Route here
 @router.delete("/{filename}", dependencies=[Depends(admin_only_guard)])
