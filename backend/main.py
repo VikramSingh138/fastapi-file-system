@@ -6,10 +6,11 @@ from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 from minio import Minio
 from dotenv import load_dotenv
-
+from pinecone import Pinecone 
 # Import the router instance from your new file!
 from routers.files import router as files_router
 from routers.auth import router as auth_router 
+from routers.rag import router as rag_router
 
 load_dotenv()
 
@@ -19,6 +20,9 @@ async def lifespan(app: FastAPI):
     minio_url = os.getenv("MINIO_URL")
     minio_user = os.getenv("MINIO_USER")
     minio_pass = os.getenv("MINIO_PASSWORD")
+
+    pinecone_key = os.getenv("PINECONE_API_KEY")
+    pinecone_env = os.getenv("PINECONE_INDEX_NAME")
 
     print("Connecting to MongoDB...")
     app.mongodb_client = AsyncIOMotorClient(mongo_url)
@@ -41,6 +45,12 @@ async def lifespan(app: FastAPI):
         print(f"Bucket '{bucket_name}' created successfully")
     else:
         print(f"Bucket '{bucket_name}' already exists")
+
+    # PINECONE BINDING TO APP STATE
+    pc = Pinecone(api_key = pinecone_key)
+
+    app.state.pinecone_index = pc.Index("fastapi-file-index")
+    print("Pinecone Index Succesfully connected and mapped to app state")
 
 
     yield  # The app runs while paused here
@@ -65,6 +75,7 @@ app.add_middleware(
 # This links all endpoints inside routers/files.py straight to our app!
 app.include_router(auth_router)
 app.include_router(files_router)
+app.include_router(rag_router)
 
 
 # Global general routes stay here

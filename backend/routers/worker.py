@@ -89,7 +89,7 @@ def process_file_pipeline(filename:str) :
             vector_tuple = (
                 f"{filename}_chunk_{i}",
                 vector,
-                {"filename": filename, "text": chunk}
+                {"file_id": filename, "text": chunk}
             )
             vectors_to_upsert.append(vector_tuple)
 
