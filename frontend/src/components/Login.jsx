@@ -55,15 +55,7 @@ function Login({ onLoginSuccess, isAlreadyAuthenticated }) {
   };
 
   const redirectToGoogleOAuth = () => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      setErrorMessage('OAuth configuration missing. Check VITE_GOOGLE_CLIENT_ID.');
-      return;
-    }
-    const redirectUri = 'http://localhost:8000/auth/oauth2/google/callback';
-    const scope =
-      'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+    window.location.href = 'http://localhost:8000/auth/google/login';
   };
 
   return (

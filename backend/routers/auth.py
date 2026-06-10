@@ -100,6 +100,29 @@ async def login_traditional(request: Request, form_data: OAuth2PasswordRequestFo
     token = create_access_token({"sub" : user["email"], "role": user["role"]})
     return {"access_token" : token ,"token_type": "bearer"}
 
+# INITIAL GOOGLE OAUTH REDIRECT INITIATOR
+@router.get("/google/login")
+async def google_login_init():
+    """
+    Constructs the Google OAuth consent target URL and forces 
+    the account selection menu instead of auto-logging in.
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+    scope = "openid email profile"
+    
+    # Building the Google Authorization Endpoint URL
+    google_auth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={client_id}&"
+        f"redirect_uri={redirect_uri}&"
+        f"response_type=code&"
+        f"scope={scope}&"
+        f"prompt=select_account"  # 👈 THIS FORCES THE EMAIL SELECTION SCREEN EVERY TIME
+    )
+    
+    return RedirectResponse(url=google_auth_url)
+
 # OAUTH2 GOOGLE CALLBACK ENDPOINT
 
 @router.get("/oauth2/google/callback")
