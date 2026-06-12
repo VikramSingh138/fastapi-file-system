@@ -12,6 +12,7 @@ A full-stack cloud file management system with semantic search and RAG (Retrieva
 - **Vector Storage** — Embeddings stored in Pinecone using HuggingFace `all-MiniLM-L6-v2`
 - **Semantic Retrieval** — Query your uploaded documents by natural language; Pinecone returns the most relevant text chunks filtered by selected file scope
 - **RAG Q&A** — Full Retrieval-Augmented Generation pipeline: retrieved context blocks are fed into Gemini 2.5 Flash to produce grounded, document-aware answers
+- **Chat UI** — Tabbed React dashboard with a dedicated chat interface: select source files, configure top-k, and get Markdown-rendered answers with expandable source-chunk citations
 
 ---
 
@@ -29,6 +30,7 @@ A full-stack cloud file management system with semantic search and RAG (Retrieva
 | Vector database | Pinecone |
 | LLM (RAG synthesis) | Google Gemini 2.5 Flash |
 | Text extraction | PyPDF + LangChain RecursiveCharacterTextSplitter |
+| Markdown rendering | react-markdown + remark-gfm |
 
 ---
 
@@ -146,7 +148,8 @@ fastapi-file-system/
     │   ├── App.jsx                # Router + auth state
     │   └── components/
     │       ├── Login.jsx          # Traditional + Google OAuth login
-    │       └── Dashboard.jsx      # File management UI
+    │       ├── Dashboard.jsx      # Tabbed shell: Files tab + Chat tab
+    │       └── Chatbot.jsx        # Chat UI: file selector, top-k slider, Markdown-rendered RAG answers with source citations
     ├── .env                       # Frontend environment variables
     └── package.json
 ```
